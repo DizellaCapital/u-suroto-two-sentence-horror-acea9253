@@ -1,36 +1,72 @@
 #!/usr/bin/env python3
-"""Two-Sentence Horror entry.
+"""Two-sentence horror entry.
 
-Writes exactly one horror story of two sentences (232 characters) to
-entry.txt inside MAKEFUN_OUTPUT_DIR (fallback /output), then validates
-the file by reading it back: UTF-8, 1-400 characters, not only
-whitespace, exactly two sentences.
+Assembles the story from its two sentences, validates the result, and
+writes it to entry.txt under MAKEFUN_OUTPUT_DIR (default /output).
 """
 
 import os
+import sys
 
-STORY = (
-    "Our dog barks at the empty armchair by the window every evening at six, "
-    "then curls up at my feet as if nothing happened. "
-    "Yesterday I dragged the armchair to the garage, and at six he barked at "
-    "the empty floor where it used to stand."
-)
+SENTENCES = [
+    "Our dog barks at the empty armchair by the window every evening "
+    "at six, then curls up at my feet as if nothing happened.",
+    "Yesterday I dragged the armchair to the garage, and at six he "
+    "barked at the empty floor where it used to stand.",
+]
+
+MAX_CHARS = 400
+
+
+TERMINATORS = (".", "!", "?")
+
+
+def count_sentences(text):
+    return sum(1 for ch in text if ch in TERMINATORS)
+
+
+def build_story(sentences):
+    text = " ".join(sentence.strip() for sentence in sentences)
+    if len(sentences) != 2:
+        raise ValueError("story must be exactly two sentences")
+    if "\n" in text or "\r" in text:
+        raise ValueError("story must not contain line breaks")
+    if count_sentences(text) != 2:
+        raise ValueError(
+            "story text has %d sentence terminators, expected 2"
+            % count_sentences(text)
+        )
+    if not 1 <= len(text) <= MAX_CHARS:
+        raise ValueError("story length %d outside 1-%d" % (len(text), MAX_CHARS))
+    if not text.strip():
+        raise ValueError("story is only whitespace")
+    return text
 
 
 def main():
+    story = build_story(SENTENCES)
     out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "entry.txt")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(STORY)
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    assert text == STORY, "read-back mismatch"
-    assert 1 <= len(text) <= 400, "length out of range"
-    assert text.strip(), "entry is only whitespace"
-    assert text.count(".") == 2, "must be exactly two sentences"
-    print(f"wrote {len(text)} characters to {path}")
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(
+            "cannot create output directory %r: %s" % (out_dir, exc)
+        ) from exc
+    if not os.path.isdir(out_dir):
+        raise ValueError("output path %r is not a directory" % out_dir)
+    target = os.path.join(out_dir, "entry.txt")
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(story)
+    with open(target, encoding="utf-8") as handle:
+        saved = handle.read()
+    if saved != story:
+        raise ValueError("read-back mismatch")
+    print("wrote %d characters to %s" % (len(saved), target))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError) as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        raise SystemExit(1)
